@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BD Bazar (E)</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;font-family:Arial,sans-serif;
+ background:#f1f5f9;color:#172033;
+}
+header{
+ background:#087b49;color:white;
+ padding:18px;text-align:center;
+}
+header h2{margin:0}
+.container{
+ max-width:450px;margin:20px auto;
+ padding:15px;
+}
+.card{
+ background:white;padding:20px;
+ border-radius:14px;
+ box-shadow:0 3px 15px #0001;
+}
+h3{text-align:center;color:#087b49}
+input{
+ width:100%;padding:13px;margin:8px 0;
+ border:1px solid #ddd;border-radius:8px;
+ font-size:16px;
+}
+button{
+ width:100%;padding:13px;margin-top:10px;
+ background:#087b49;color:white;
+ border:0;border-radius:8px;
+ font-size:16px;font-weight:bold;
+}
+button:disabled{opacity:.5}
+#message{font-size:14px;text-align:center;margin-top:12px}
+nav{display:flex;gap:8px;margin-top:15px}
+nav button{font-size:13px}
+.hidden{display:none}
+</style>
+</head>
+
+<body>
+
+<header>
+<h2>🛍️ BD Bazar (E)</h2>
+<p>বাংলাদেশের অনলাইন কেনাবেচার বাজার</p>
+</header>
+
+<div class="container">
+
+<div class="card" id="register">
+<h3>নতুন অ্যাকাউন্ট তৈরি</h3>
+
+<input id="name" placeholder="আপনার নাম">
+<input id="phone" type="tel" placeholder="মোবাইল নম্বর (01XXXXXXXXX)">
+<input id="password" type="password" placeholder="Password">
+
+<div id="recaptcha-container"></div>
+
+<button onclick="sendOTP()">OTP পাঠান</button>
+
+<div id="otp-area" class="hidden">
+<input id="otp" type="number" placeholder="৬ সংখ্যার OTP লিখুন">
+<button onclick="verifyOTP()">OTP Verify করুন</button>
+</div>
+
+<p id="message"></p>
+</div>
+
+<div class="card hidden" id="home">
+<h3>BD Bazar (E)</h3>
+<h2>স্বাগতম!</h2>
+<p>আপনার OTP Verification সফল হয়েছে।</p>
+
+<nav>
+<button onclick="showSection('buy')">পণ্য কিনুন</button>
+<button onclick="showSection('sell')">পণ্য বিক্রি</button>
+</nav>
+
+<div id="buy">
+<h3>পণ্যের তালিকা</h3>
+<p>শীঘ্রই এখানে পণ্যের তালিকা দেখা যাবে।</p>
+</div>
+
+<div id="sell" class="hidden">
+<h3>পণ্য বিক্রি করুন</h3>
+<input placeholder="পণ্যের নাম">
+<input placeholder="দাম">
+<input placeholder="মোবাইল নম্বর">
+<button onclick="alert('পণ্য পোস্ট করার জন্য পরবর্তী ধাপে Database যুক্ত করতে হবে।')">পোস্ট করুন</button>
+</div>
+
+<button onclick="logout()">Logout</button>
+</div>
+
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+<script>
+
+// =================================
+// তোমার Firebase Config এখানে বসবে
+// =================================
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBrxPKoPLhb87F8Nxw-YFlLgZ-Cc34Z5dc",
+  authDomain: "bd-bazar-e.firebaseapp.com",
+  projectId: "bd-bazar-e",
+  storageBucket: "bd-bazar-e.firebasestorage.app",
+  messagingSenderId: "878444231032",
+  appId: "1:878444231032:web:f7793996ebdc1682dfb08d",
+  measurementId: "G-JZDQKXZ28E"
+};
+  zaSyBrxPKoPLhC// Firebase চালু
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
+auth.languageCode = "bn";
+
+let confirmationResult = null;
+let verifier = null;
+
+// বাংলাদেশি নম্বর ঠিক করা
+function formatPhone(number){
+ number = number.replace(/\D/g,"");
+
+ if(number.startsWith("8801") && number.length===13)
+   return "+" + number;
+
+ if(number.startsWith("01") && number.length===11)
+   return "+88" + number;
+
+ throw new Error("সঠিক বাংলাদেশি মোবাইল নম্বর লিখুন");
+}
+
+// reCAPTCHA
+function setupRecaptcha(){
+ if(verifier) return;
+
+ verifier = new firebase.auth.RecaptchaVerifier(
+   "recaptcha-container",
+   {size:"normal"},
+   auth
+ );
+
+ verifier.render();
+}
+
+// OTP পাঠানো
+async function sendOTP(){
+
+ const message = document.getElementById("message");
+
+ try{
+   const name = document.getElementById("name").value.trim();
+   const password = document.getElementById("password").value;
+
+   if(!name || !password){
+     throw new Error("নাম ও Password লিখুন");
+   }
+
+   if(password.length < 6){
+     throw new Error("Password কমপক্ষে ৬ অক্ষরের হতে হবে");
+   }
+
+   const phone = formatPhone(
+     document.getElementById("phone").value
+   );
+
+   setupRecaptcha();
+
+   message.innerText = "OTP পাঠানো হচ্ছে...";
+
+   await verifier.render();
+
+   confirmationResult =
+     await auth.signInWithPhoneNumber(phone,verifier);
+
+   document.getElementById("otp-area").classList.remove("hidden");
+
+   message.innerText = "OTP পাঠানো হয়েছে। SMS দেখুন।";
+
+ }catch(error){
+   message.innerText = error.message;
+ }
+}
+
+// OTP Verify
+async function verifyOTP(){
+
+ const code = document.getElementById("otp").value.trim();
+ const message = document.getElementById("message");
+
+ try{
+
+   if(!confirmationResult){
+     throw new Error("আগে OTP পাঠান");
+   }
+
+   if(code.length !== 6){
+     throw new Error("৬ সংখ্যার OTP লিখুন");
+   }
+
+   message.innerText = "যাচাই হচ্ছে...";
+
+   const result = await confirmationResult.confirm(code);
+
+   document.getElementById("register").classList.add("hidden");
+   document.getElementById("home").classList.remove("hidden");
+
+   message.innerText = "সফলভাবে Verify হয়েছে!";
+
+ }catch(error){
+   message.innerText = "সমস্যা: " + error.message;
+ }
+}
+
+// Buy / Sell
+function showSection(section){
+
+ document.getElementById("buy").classList.add("hidden");
+ document.getElementById("sell").classList.add("hidden");
+
+ document.getElementById(section).classList.remove("hidden");
+}
+
+// Logout
+async function logout(){
+
+ await auth.signOut();
+
+ document.getElementById("home").classList.add("hidden");
+ document.getElementById("register").classList.remove("hidden");
+
+ document.getElementById("otp-area").classList.add("hidden");
+
+ location.reload();
+}
+
+</script>
+</body>
+</html>
